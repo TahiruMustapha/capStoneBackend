@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Health</title>
+    <style>
+        /* {{CSS_VARIABLES}} */
+        :root {
+            /* Fallback values for valid CSS syntax, will be replaced */
+            --status-color: #2ecc71;
+            --status-bg-color: rgba(46, 204, 113, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0F172A; /* DaisyUI Night Base-100 */
+            color: #E2E8F0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+        }
+        .card {
+            background: #1E293B; /* Slightly lighter dark for card */
+            padding: 2rem 3rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            text-align: center;
+            border: 1px solid #334155;
+        }
+        .status-dot {
+            height: 20px;
+            width: 20px;
+            background-color: var(--status-color);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+            box-shadow: 0 0 10px var(--status-color);
+        }
+        h1 { color: #F8FAFC; margin-bottom: 0.5rem; }
+        p { color: #94A3B8; font-size: 1.1rem; }
+        .db-status {
+            margin-top: 1.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--status-bg-color);
+            color: var(--status-color);
+            border-radius: 20px;
+            display: inline-block;
+            font-weight: 600;
+            border: 1px solid var(--status-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+            <span class="status-dot"></span>
+            <h1>{{TITLE}}</h1>
+        </div>
+        <p>{{MESSAGE}}</p>
+        <div class="db-status">
+            Database: {{DB_STATUS}}
+        </div>
+    </div>
+</body>
+</html>
