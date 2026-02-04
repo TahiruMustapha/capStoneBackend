@@ -87,7 +87,11 @@ app.get('/health', async (req, res) => {
 
 app.use('/api', clientRoutes);
 
-app.listen(port, () => {
-    console.log(`listening on port ${port}`)
-});
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(port, () => {
+        console.log(`listening on port ${port}`)
+    });
+}
+
+export default app;
 
