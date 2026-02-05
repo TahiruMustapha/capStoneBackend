@@ -1,0 +1,103 @@
+name: "The Destroyer"
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: '*/15 * * * *' # Every 15 minutes
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  destroy-pr:
+    if: github.event_name == 'pull_request'
+    name: "Destroy PR Environment"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::330858616968:role/capstoneProject
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Select Workspace & Destroy
+        run: |
+          WORKSPACE="pr-${{ github.event.number }}"
+          # Only destroy if workspace exists
+          if terraform workspace select $WORKSPACE; then
+            terraform destroy -auto-approve -var="pr_number=${{ github.event.number }}"
+            terraform workspace select default
+            terraform workspace delete $WORKSPACE
+          else
+            echo "Workspace $WORKSPACE does not exist. Skipping destroy."
+          fi
+
+  scheduled-cleanup:
+    if: github.event_name == 'schedule'
+    name: "Scheduled Cleanup (Reaper)"
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Install AWS CLI
+        run: |
+            sudo apt-get update
+            sudo apt-get install -y awscli
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::330858616968:role/capstoneProject
+          aws-region: us-east-1
+
+      - name: Find and Terminate Stale Instances
+        run: |
+            # Find instances tagged with Name=phoenix-pr-* that are running
+            # Check LaunchTime. We'll use a simple python script or jq to filter.
+            # Here is a bash/jq approach.
+            
+            # Get instances
+            aws ec2 describe-instances \
+                --filters "Name=tag:Name,Values=phoenix-pr-*" "Name=instance-state-name,Values=running" \
+                --query "Reservations[].Instances[?LaunchTime<='$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)']].[InstanceId]" \
+                --output text > stale_instances.txt
+            
+                 if [ -s stale_instances.txt ]; then
+                    echo "Terminating stale instances:"
+                    cat stale_instances.txt
+    
+                    # Read instances into array and terminate
+                    mapfile -t instances < stale_instances.txt
+                   if [ ${#instances[@]} -gt 0 ]; then
+                      aws ec2 terminate-instances --instance-ids "${instances[@]}"
+        
+                      # Wait and verify termination
+                      echo "Waiting for termination to complete..."
+                      aws ec2 wait instance-terminated --instance-ids "${instances[@]}"
+                      echo "Termination completed successfully."
+                   fi
+                else
+                    echo "No stale instances found."
+                 fi
