@@ -18,5 +18,5 @@ pool.on("error", (err) => {
   // do NOT exit process; just log
 });
 
-// A helper query function
+
 export const query = (text, params) => pool.query(text, params);
