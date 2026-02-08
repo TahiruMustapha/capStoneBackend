@@ -31,6 +31,7 @@ jobs:
     name: "Deploy Ephemeral Env"
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ./terraform
@@ -60,7 +61,7 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::330858616968:role/capstoneProject
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-east-1
         
         
@@ -84,10 +85,12 @@ jobs:
         run: |
           # Use the newly built image tag
           BACKEND_TAG="mustaphatahiru/capstone-backend:pr-${{ github.event.number }}"
+          FRONTEND_TAG="mustaphatahiru/capstone-frontend:latest"
           
           terraform apply -auto-approve \
             -var="pr_number=${{ github.event.number }}" \
-            -var="backend_image=$BACKEND_TAG"
+            -var="backend_image=$BACKEND_TAG" \
+            -var="frontend_image=$FRONTEND_TAG"
           
           # Capture Output
           PUBLIC_IP=$(terraform output -raw public_ip)

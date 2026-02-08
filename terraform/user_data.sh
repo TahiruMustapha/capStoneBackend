@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#Ensure the script exits on any error and treats unset variables as errors
+set -euo pipefail
+
 # Update and Install Docker
 sudo apt-get update -y
 sudo apt-get install -y ca-certificates curl gnupg lsb-release
@@ -27,12 +30,11 @@ services:
     container_name: capstone-postgres-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: tahiru
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: capstoneProject
+      POSTGRES_USER: ${postgres_user}
+      POSTGRES_PASSWORD: ${postgres_password}
+      POSTGRES_DB: ${postgres_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Skipped as file not present in repo root
 
   backend:
     image: ${backend_image}
@@ -42,9 +44,9 @@ services:
       - postgres
     environment:
       PORT: 3000
-      PG_USER: tahiru
-      PG_PASSWORD: password
-      PG_DATABASE: capstoneProject
+      PG_USER: ${postgres_user}
+      PG_PASSWORD: ${postgres_password}
+      PG_DATABASE: ${postgres_db}
       PG_HOST: postgres
       PG_PORT: 5432
     ports:
@@ -94,6 +96,11 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
+    }
+
+     location /health {
+        proxy_pass http://backend:3000/health;
+        proxy_set_header Host $host;
     }
 }
 EOF

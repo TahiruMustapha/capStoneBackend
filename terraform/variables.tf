@@ -12,6 +12,25 @@ variable "ami_id" {
   description = "AMI ID for Ubuntu 24.04"
   default     = "ami-0b6c6ebed2801a5cb" 
 }
+variable "POSTGRES_USER" {
+  description = "Postgres USER"
+  default = "tahiru"
+  type = string
+  sensitive = true
+}
+
+variable "POSTGRES_PASSWORD" {
+  description = "Postgres Password"
+  default = "password"
+  type = string
+  sensitive = true
+}
+variable "POSTGRES_DB" {
+  description = "Postgres DB "
+  default = "capstoneProject"
+  type = string
+  sensitive = true
+}
 
 variable "pr_number" {
   description = "Pull Request Number for tagging"

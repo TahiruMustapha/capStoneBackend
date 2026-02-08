@@ -14,7 +14,7 @@ provider "aws" {
 }
 
 resource "aws_security_group" "app_sg" {
-  name        = "capstone-sg-${var.pr_number}"
+  name_prefix = "capstone-sg-${var.pr_number}-"
   description = "Allow Web and SSH traffic"
 
   ingress {
@@ -48,8 +48,15 @@ resource "aws_security_group" "app_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
-    Name = "capstone-sg-${var.pr_number}"
+    Name        = "capstone-sg-${var.pr_number}"
+    Environment = "ephemeral"
+    PR          = var.pr_number
+    Project     = "devops-training"
   }
 }
 
@@ -60,11 +67,17 @@ resource "aws_instance" "capstoneServer" {
   security_groups = [aws_security_group.app_sg.name]
 
   user_data = templatefile("user_data.sh", {
-    backend_image  = var.backend_image
-    frontend_image = var.frontend_image
+    backend_image      = var.backend_image
+    frontend_image     = var.frontend_image
+    postgres_user      = var.POSTGRES_USER
+    postgres_password  = var.POSTGRES_PASSWORD
+    postgres_db        = var.POSTGRES_DB
   })
 
   tags = {
-    Name = "phoenix-pr-${var.pr_number}"
+    Name        = "phoenix-pr-${var.pr_number}"
+    Environment = "ephemeral"
+    PR          = var.pr_number
+    Project     = "devops-training"
   }
 }
