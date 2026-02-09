@@ -72,6 +72,7 @@ resource "aws_instance" "capstoneServer" {
     postgres_user      = var.POSTGRES_USER
     postgres_password  = var.POSTGRES_PASSWORD
     postgres_db        = var.POSTGRES_DB
+    init_sql_content   = file("../init.sql")
   })
 
   tags = {
