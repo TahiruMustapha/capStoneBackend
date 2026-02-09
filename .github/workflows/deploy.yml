@@ -105,8 +105,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const ip = "${{ steps.apply.outputs.public_ip }}";
-            const prNumber = context.issue.number;
-            const message = `**Environment Deployed!**\n\nThe ephemeral environment for PR #${prNumber} is ready.\n\n🔗 URL: http://${ip}\n\n⚠️ *This environment is valid for 30 minutes.*`;
+            const prNumber = ${{ github.event.number }};
+            const message = `Environment is Deployed!\n\nThe ephemeral environment for the new  PR${prNumber} is ready.\n\nVisit the application at: http://${ip} \n\nThis environment will be valid for 30 minutes.`;
             
             github.rest.issues.createComment({
               owner: context.repo.owner,
