@@ -21,26 +21,39 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plu
 mkdir -p /home/ubuntu/app
 cd /home/ubuntu/app
 
-#Init SQL with Seed Data
-cat <<EOF > init.sql
-CREATE TABLE IF NOT EXISTS clients_tb (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    job VARCHAR(255) NOT NULL,
-    rate DECIMAL(10,2) NOT NULL,
-    isactive BOOLEAN NOT NULL
-);
+# 1. Create Init SQL from project root content (Safe Quoted Heredoc)
+cat <<'INIT_SQL_EOF' > init.sql
+${init_sql_content}
+INIT_SQL_EOF
 
-INSERT INTO clients_tb (name, email, job, rate, isactive) VALUES
-('John Doe', 'john@example.com', 'Software Engineer', 100.00, true),
-('Jane Smith', 'jane@example.com', 'Fullstack Developer', 110.00, true),
-('Alice Johnson', 'alice@example.com', 'Project Manager', 90.00, false),
-('Bob Brown', 'bob@example.com', 'DevOps Specialist', 120.00, true),
-('Charlie Davis', 'charlie@example.com', 'Data Scientist', 130.00, true);
-EOF
+# 2. Create Nginx Config (Safe Quoted Heredoc - Protects $host and proxy variables)
+cat <<'NGINX_EOF' > nginx.conf
+server {
+    listen 80;
 
-# Create Docker Compose File
+    location / {
+        proxy_pass http://frontend:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /api {
+        proxy_pass http://backend:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /health {
+        proxy_pass http://backend:3000/health;
+        proxy_set_header Host $host;
+    }
+}
+NGINX_EOF
+
+# 3. Create Docker Compose File (Unquoted Heredoc - Allows Terraform Interpolation)
 cat <<EOF > docker-compose.yml
 services:
   postgres:
@@ -80,7 +93,6 @@ services:
     ports:
       - "8080:80" 
 
-  # Nginx Proxy to route requests to Frontend and Backend
   proxy:
     image: nginx:alpine
     container_name: nginx-proxy
@@ -95,33 +107,6 @@ services:
 
 volumes:
   postgres_data:
-EOF
-
-# Create Nginx Config for the Proxy Container
-cat <<EOF > nginx.conf
-server {
-    listen 80;
-
-    location / {
-        # Proxy to Frontend Container
-        proxy_pass http://frontend:80;
-    }
-
-    location /api {
-        # Proxy to Backend Container
-        proxy_pass http://backend:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-     location /health {
-        proxy_pass http://backend:3000/health;
-        proxy_set_header Host \$host;
-    }
-}
 EOF
 
 # Start Services
