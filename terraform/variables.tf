@@ -34,7 +34,7 @@ variable "POSTGRES_DB" {
 variable "key_name" {
   description = "Name of the SSH key pair to use for the instance"
   type        = string
-  default = "capstone-key1"
+  default = "capstone-key"
 
 }
 
