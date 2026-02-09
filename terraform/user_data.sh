@@ -42,38 +42,37 @@ EOF
 
 # Create Docker Compose File
 cat <<EOF > docker-compose.yml
-version: '3.9'
 services:
   postgres:
     image: postgres:16-alpine
     container_name: capstone-postgres-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: \${postgres_user}
-      POSTGRES_PASSWORD: \${postgres_password}
-      POSTGRES_DB: \${postgres_db}
+      POSTGRES_USER: ${postgres_user}
+      POSTGRES_PASSWORD: ${postgres_password}
+      POSTGRES_DB: ${postgres_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   backend:
-    image: \${backend_image}
+    image: ${backend_image}
     container_name: capstone-backend
     restart: unless-stopped
     depends_on:
       - postgres
     environment:
       PORT: 3000
-      PG_USER: \${postgres_user}
-      PG_PASSWORD: \${postgres_password}
-      PG_DATABASE: \${postgres_db}
+      PG_USER: ${postgres_user}
+      PG_PASSWORD: ${postgres_password}
+      PG_DATABASE: ${postgres_db}
       PG_HOST: postgres
       PG_PORT: 5432
     ports:
       - "3000:3000" 
 
   frontend:
-    image: \${frontend_image}
+    image: ${frontend_image}
     container_name: capstone-frontend
     restart: unless-stopped
     depends_on:
