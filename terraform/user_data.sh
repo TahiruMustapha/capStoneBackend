@@ -21,6 +21,25 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plu
 mkdir -p /home/ubuntu/app
 cd /home/ubuntu/app
 
+#Init SQL with Seed Data
+cat <<EOF > init.sql
+CREATE TABLE IF NOT EXISTS clients_tb (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    job VARCHAR(255) NOT NULL,
+    rate DECIMAL(10,2) NOT NULL,
+    isactive BOOLEAN NOT NULL
+);
+
+INSERT INTO clients_tb (name, email, job, rate, isactive) VALUES
+('John Doe', 'john@example.com', 'Software Engineer', 100.00, true),
+('Jane Smith', 'jane@example.com', 'Fullstack Developer', 110.00, true),
+('Alice Johnson', 'alice@example.com', 'Project Manager', 90.00, false),
+('Bob Brown', 'bob@example.com', 'DevOps Specialist', 120.00, true),
+('Charlie Davis', 'charlie@example.com', 'Data Scientist', 130.00, true);
+EOF
+
 # Create Docker Compose File
 cat <<EOF > docker-compose.yml
 version: '3.9'
@@ -30,30 +49,31 @@ services:
     container_name: capstone-postgres-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${postgres_user}
-      POSTGRES_PASSWORD: ${postgres_password}
-      POSTGRES_DB: ${postgres_db}
+      POSTGRES_USER: \${postgres_user}
+      POSTGRES_PASSWORD: \${postgres_password}
+      POSTGRES_DB: \${postgres_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   backend:
-    image: ${backend_image}
+    image: \${backend_image}
     container_name: capstone-backend
     restart: unless-stopped
     depends_on:
       - postgres
     environment:
       PORT: 3000
-      PG_USER: ${postgres_user}
-      PG_PASSWORD: ${postgres_password}
-      PG_DATABASE: ${postgres_db}
+      PG_USER: \${postgres_user}
+      PG_PASSWORD: \${postgres_password}
+      PG_DATABASE: \${postgres_db}
       PG_HOST: postgres
       PG_PORT: 5432
     ports:
       - "3000:3000" 
 
   frontend:
-    image: ${frontend_image}
+    image: \${frontend_image}
     container_name: capstone-frontend
     restart: unless-stopped
     depends_on:
