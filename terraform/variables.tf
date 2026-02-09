@@ -31,6 +31,12 @@ variable "POSTGRES_DB" {
   type = string
   sensitive = true
 }
+variable "key_name" {
+  description = "Name of the SSH key pair to use for the instance"
+  type        = string
+  default = "capstone-key"
+
+}
 
 variable "pr_number" {
   description = "Pull Request Number for tagging"
