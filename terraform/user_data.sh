@@ -100,7 +100,7 @@ server {
 
      location /health {
         proxy_pass http://backend:3000/health;
-        proxy_set_header Host $host;
+        proxy_set_header Host \$host;
     }
 }
 EOF
