@@ -59,7 +59,6 @@ resource "aws_security_group" "app_sg" {
     Project     = "devops-training"
   }
 }
-
 resource "aws_instance" "capstoneServer" {
   ami           = var.ami_id
   instance_type = var.instance_type
