@@ -80,7 +80,7 @@ jobs:
 
       - name: Find and Terminate Stale Instances
         run: |
-            set -euo pipefail  # Exit on error, undefined variables, pipe failures
+            set -euo pipefail  
             
             # Calculate cutoff time (30 minutes ago) in epoch seconds
             CUTOFF_TIME=$(date -u -d '30 minutes ago' +%s)
@@ -116,7 +116,7 @@ jobs:
                 
                 echo "Waiting for termination to complete..."
                 aws ec2 wait instance-terminated --instance-ids "${STALE_INSTANCES[@]}"
-                echo "✓ Successfully terminated ${#STALE_INSTANCES[@]} instance(s)"
+                echo " Successfully terminated ${#STALE_INSTANCES[@]} instance(s)"
             else
                 echo "No stale instances found (all instances are less than 30 minutes old)."
             fi

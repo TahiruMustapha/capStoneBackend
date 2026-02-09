@@ -1,6 +1,5 @@
 #!/bin/bash
 
-#Ensure the script exits on any error and treats unset variables as errors
 set -euo pipefail
 
 # Update and Install Docker
@@ -21,12 +20,12 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plu
 mkdir -p /home/ubuntu/app
 cd /home/ubuntu/app
 
-# 1. Create Init SQL from project root content (Safe Quoted Heredoc)
+
 cat <<'INIT_SQL_EOF' > init.sql
 ${init_sql_content}
 INIT_SQL_EOF
 
-# 2. Create Nginx Config (Safe Quoted Heredoc - Protects $host and proxy variables)
+
 cat <<'NGINX_EOF' > nginx.conf
 server {
     listen 80;
@@ -53,7 +52,6 @@ server {
 }
 NGINX_EOF
 
-# 3. Create Docker Compose File (Unquoted Heredoc - Allows Terraform Interpolation)
 cat <<EOF > docker-compose.yml
 services:
   postgres:
