@@ -7,6 +7,7 @@ on:
     - cron: '*/15 * * * *' # Every 15 minutes
 
 permissions:
+  id-token: write
   contents: read
   pull-requests: write
 
@@ -19,10 +20,6 @@ jobs:
       run:
         working-directory: ./terraform
     
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -66,10 +63,6 @@ jobs:
     if: github.event_name == 'schedule'
     name: "Scheduled Cleanup (Reaper)"
     runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write
-      contents: read
     
     steps:
       - name: Configure AWS credentials via OIDC
