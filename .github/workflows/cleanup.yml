@@ -47,7 +47,10 @@ jobs:
             if terraform destroy -auto-approve \
               -var="pr_number=${{ github.event.number }}" \
               -var="backend_image=$BACKEND_TAG" \
-              -var="frontend_image=$FRONTEND_TAG"; then
+              -var="frontend_image=$FRONTEND_TAG" \
+              -var="POSTGRES_USER=${{ secrets.POSTGRES_USER }}" \
+              -var="POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" \
+              -var="POSTGRES_DB=${{ secrets.POSTGRES_DB }}"; then
               terraform workspace select default
               terraform workspace delete $WORKSPACE
               echo "Successfully destroyed workspace $WORKSPACE"

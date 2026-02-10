@@ -88,7 +88,10 @@ jobs:
           terraform apply -auto-approve \
             -var="pr_number=${{ github.event.number }}" \
             -var="backend_image=$BACKEND_TAG" \
-            -var="frontend_image=$FRONTEND_TAG"
+            -var="frontend_image=$FRONTEND_TAG" \
+            -var="POSTGRES_USER=${{ secrets.POSTGRES_USER }}" \
+            -var="POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" \
+            -var="POSTGRES_DB=${{ secrets.POSTGRES_DB }}"
           
           # Capture Output
           PUBLIC_IP=$(terraform output -raw public_ip)

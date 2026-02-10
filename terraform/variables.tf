@@ -14,20 +14,17 @@ variable "ami_id" {
 }
 variable "POSTGRES_USER" {
   description = "Postgres USER"
-  default = "tahiru"
   type = string
   sensitive = true
 }
 
 variable "POSTGRES_PASSWORD" {
   description = "Postgres Password"
-  default = "password"
   type = string
   sensitive = true
 }
 variable "POSTGRES_DB" {
   description = "Postgres DB "
-  default = "capstoneProject"
   type = string
   sensitive = true
 }
