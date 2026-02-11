@@ -1,17 +1,14 @@
-name: "The Creator"
+name: Build and Trigger Infra
 
 on:
+  push:
+    branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened]
-
-permissions:
-  id-token: write
-  contents: read
-  pull-requests: write
+    types: [opened, synchronize, reopened, closed]
 
 jobs:
   test:
-    name: "Run Tests"
+    name: Run Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,7 +17,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install Dependencies
         run: npm ci
@@ -28,14 +25,16 @@ jobs:
       - name: Run Tests
         run: npm test
 
-  deploy:
-    name: "Deploy Ephemeral Env"
+  build-and-push:
+    name: Build and Trigger Infra
+
+    # Do not run on PR closures
+    if: github.event.action != 'closed'
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: ./terraform
+
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # environment: production
 
     steps:
       - name: Checkout
@@ -47,69 +46,54 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and Push Backend
+      - name: Build and Push
         uses: docker/build-push-action@v4
         with:
-          context: .
           push: true
-          tags: mustaphatahiru/capstone-backend:pr-${{ github.event.number }}
-      
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v6.0.0
-        with:
-          aws-region: us-east-1
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-      - name: Test AWS credentials
-        run: aws sts get-caller-identity
-        
-        
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_wrapper: false
-        
-      - name: Terraform Init
-        run: terraform init
+          # Note: Uses commit SHA as the tag for exact tracking
 
-      - name: Select/Create Workspace
-        id: workspace
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:latest
+            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ github.sha }}
+
+      - name: Trigger Infra Deploy
         run: |
-          WORKSPACE="pr-${{ github.event.number }}"
-          echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
-          terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+          set -euo pipefail
 
-      - name: Terraform Apply
-        id: apply
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository_owner }}/capstone-infra/dispatches \
+            -d '{
+              "event_type": "backend_updated",
+              "client_payload": {
+                "env": "${{ github.event_name == 'push' && 'production' || 'ephemeral' }}",
+                "pr_number": "${{ github.event.number || '0' }}",
+                "backend_tag": "${{ github.sha }}",
+                "repository": "${{ github.repository }}"
+              }
+            }'
+
+  destroy-env:
+    # Only run when a PR is closed
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cleanup
         run: |
-          # Use the newly built image tag
-          BACKEND_TAG="mustaphatahiru/capstone-backend:pr-${{ github.event.number }}"
-          FRONTEND_TAG="mustaphatahiru/capstone-frontend:latest"
-          
-          terraform apply -auto-approve \
-            -var="pr_number=${{ github.event.number }}" \
-            -var="backend_image=$BACKEND_TAG" \
-            -var="frontend_image=$FRONTEND_TAG" \
-            -var="POSTGRES_USER=${{ secrets.POSTGRES_USER }}" \
-            -var="POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" \
-            -var="POSTGRES_DB=${{ secrets.POSTGRES_DB }}"
-          
-          # Capture Output
-          PUBLIC_IP=$(terraform output -raw public_ip)
-          echo "public_ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+          set -euo pipefail
 
-      - name: Comment on PR
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const [owner, repo] = "${{ github.repository }}".split("/");
-            const prNumber = ${{ github.event.number }};
-            const ip = "${{ steps.apply.outputs.public_ip }}";
-            const message = `Environment is Deployed!\n\nThe ephemeral environment for the new  PR${prNumber} is ready.\n\nVisit the application at: http://${ip} \n\nThis environment will be valid for 30 minutes.`;
-            
-            github.rest.issues.createComment({
-              owner: owner,
-              repo: repo,
-              issue_number: prNumber,
-              body: message
-            });
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository_owner }}/capstone-infra/dispatches \
+            -d '{
+              "event_type": "destroy_ephemeral",
+              "client_payload": {
+                "pr_number": "${{ github.event.number }}"
+              }
+            }'
