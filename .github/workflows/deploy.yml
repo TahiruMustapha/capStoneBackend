@@ -3,8 +3,16 @@ name: Build and Trigger Infra
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   pull_request:
     types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Manual version tag'
+        required: false
+        default: ''
 
 jobs:
   test:
@@ -46,15 +54,25 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Set Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and Push
         uses: docker/build-push-action@v4
         with:
           push: true
-          # Note: Uses commit SHA as the tag for exact tracking
-
+          # Note: Uses semantic version, tag or commit SHA for exact tracking
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/capstone-backend:latest
-            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ steps.vars.outputs.tag }}
 
       - name: Trigger Infra Deploy
         run: |
@@ -69,9 +87,9 @@ jobs:
             -d '{
               "event_type": "backend_updated",
               "client_payload": {
-                "env": "${{ github.event_name == 'push' && 'production' || 'ephemeral' }}",
+                "env": "${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'production' || 'ephemeral' }}",
                 "pr_number": "${{ github.event.number || '0' }}",
-                "backend_tag": "${{ github.sha }}",
+                "backend_tag": "${{ steps.vars.outputs.tag }}",
                 "repository": "${{ github.repository }}"
               }
             }'
