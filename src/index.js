@@ -26,8 +26,6 @@ const __dirname = path.dirname(__filename);
 app.get('/health', async (req, res) => {
     try {
         await query('SELECT 1');
-        // throw new Error('Simulated DB Failure');
-        // throw new Error('Simulated DB Failure');
         const data = { status: 'ok', database: 'connected' };
         
         if (req.accepts('html')) {
@@ -46,7 +44,7 @@ app.get('/health', async (req, res) => {
 
                 const renderedHtml = html
                     .replace('/* {{CSS_VARIABLES}} */', cssVariables)
-                    .replace('{{TITLE}}', 'System Operational')
+                    .replace('{{TITLE}}', 'System is Operational')
                     .replace('{{MESSAGE}}', 'All systems are running smoothly.')
                     .replace('{{DB_STATUS}}', 'Connected');
                 
