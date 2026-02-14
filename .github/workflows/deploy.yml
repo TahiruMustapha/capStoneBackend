@@ -3,20 +3,21 @@ name: Build and Trigger Infra
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*'
   pull_request:
     types: [opened, synchronize, reopened, closed]
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Manual version tag'
-        required: false
-        default: ''
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+ 
 
 jobs:
   test:
     name: Run Tests
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,7 +38,8 @@ jobs:
     name: Build and Trigger Infra
 
     # Do not run on PR closures
-    if: github.event.action != 'closed'
+    # Also skip fork PRs (no secrets available there)
+    if: github.event.action != 'closed' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     needs: test
     runs-on: ubuntu-latest
 
@@ -54,31 +56,30 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set Tag
-        id: vars
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and Push
+      - name: Build and Push (main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v4
         with:
           push: true
-          # Note: Uses semantic version, tag or commit SHA for exact tracking
+          # Note: Uses commit SHA as the tag for exact tracking
+
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/capstone-backend:latest
-            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ steps.vars.outputs.tag }}
+            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ github.sha }}
+
+      - name: Build and Push (PR)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v4
+        with:
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ github.sha }}
 
       - name: Trigger Infra Deploy
         run: |
           set -euo pipefail
 
-          curl -L \
+          curl --fail-with-body --silent --show-error -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
@@ -87,23 +88,24 @@ jobs:
             -d '{
               "event_type": "backend_updated",
               "client_payload": {
-                "env": "${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'production' || 'ephemeral' }}",
+                "env": "${{ github.event_name == 'push' && 'production' || 'ephemeral' }}",
                 "pr_number": "${{ github.event.number || '0' }}",
-                "backend_tag": "${{ steps.vars.outputs.tag }}",
+                "backend_tag": "${{ github.sha }}",
                 "repository": "${{ github.repository }}"
               }
             }'
 
   destroy-env:
     # Only run when a PR is closed
-    if: github.event.action == 'closed'
+    # Skip fork PRs (no secrets available there)
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Cleanup
         run: |
           set -euo pipefail
 
-          curl -L \
+          curl --fail-with-body --silent --show-error -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
