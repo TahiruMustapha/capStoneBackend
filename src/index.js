@@ -46,7 +46,7 @@ app.get('/health', async (req, res) => {
 
                 const renderedHtml = html
                     .replace('/* {{CSS_VARIABLES}} */', cssVariables)
-                    .replace('{{TITLE}}', 'System Operational')
+                    .replace('{{TITLE}}', 'System is Operational')
                     .replace('{{MESSAGE}}', 'All systems are running smoothly.')
                     .replace('{{DB_STATUS}}', 'Connected');
                 
