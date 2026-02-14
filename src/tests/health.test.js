@@ -49,6 +49,6 @@ describe('GET /health', () => {
       .set('Accept', 'text/html');
     
     expect(response.status).toBe(200);
-    expect(response.text).toContain('System Operational');
+    expect(response.text).toContain('System is Operational');
   });
 });
