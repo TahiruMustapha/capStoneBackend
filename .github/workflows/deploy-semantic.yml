@@ -84,6 +84,9 @@ jobs:
           if [ "${{ github.event_name }}" == "push" ] && [ "$NEW_RELEASE_PUBLISHED" == "true" ]; then
              echo "TAG=v$NEW_RELEASE_VERSION" >> $GITHUB_OUTPUT
              echo "IS_RELEASE=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+             echo "TAG=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+             echo "IS_RELEASE=false" >> $GITHUB_OUTPUT
           else
              echo "TAG=${{ github.sha }}" >> $GITHUB_OUTPUT
              echo "IS_RELEASE=false" >> $GITHUB_OUTPUT
@@ -94,9 +97,8 @@ jobs:
         with:
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ github.sha }}
-            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:latest
-            ${{ steps.set_tag.outputs.IS_RELEASE == 'true' && format('{0}/capstone-backend:{1}', secrets.DOCKER_USERNAME, steps.set_tag.outputs.TAG) || '' }}
+            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ steps.set_tag.outputs.TAG }}
+            ${{ steps.set_tag.outputs.IS_RELEASE == 'true' && format('{0}/capstone-backend:latest', secrets.DOCKER_USERNAME) || '' }}
 
       - name: Trigger Infra Deploy
         run: |
