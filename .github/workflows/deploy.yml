@@ -1,18 +1,25 @@
-name: Build and Trigger Infra
+name: "Release & Deploy (Backend)"
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
     types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+  # Allow manual trigger for testing
+  workflow_dispatch:
 
 concurrency:
   group: deploy-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
-  contents: read
- 
+  contents: write    
+  packages: write    
+  pull-requests: read
+  issues: write      
 
 jobs:
   test:
@@ -20,92 +27,132 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Node
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - name: Setup Nodejs
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
+          node-version: "22"
+          cache: "npm"
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
+      - name: Run tests
+       
+        run: npm test 
 
-      - name: Run Tests
-        run: npm test
-
-  build-and-push:
-    name: Build and Trigger Infra
-
-    # Do not run on PR closures
-    # Also skip fork PRs (no secrets available there)
-    if: github.event.action != 'closed' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+  release:
+    name: "Semantic Release"
     needs: test
+    # Only run on push to main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-
-    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # environment: production
-
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 
+
+      - name: Semantic Release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          extra_plugins: |
+            @semantic-release/git
+
+  build_and_push:
+    name: "Build & Push Docker Image"
+    runs-on: ubuntu-latest
+    needs: [test, release]
+    
+    
+    if: (github.event_name == 'pull_request' && github.event.action != 'closed') || needs.release.outputs.new_release_published == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Image Tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            TAG="pr-${{ github.event.number }}"
+            echo "ENV_TYPE=ephemeral" >> $GITHUB_OUTPUT
+            echo "PR_NUMBER=${{ github.event.number }}" >> $GITHUB_OUTPUT
+          else
+            TAG="v${{ needs.release.outputs.new_release_version }}"
+            echo "ENV_TYPE=production" >> $GITHUB_OUTPUT
+            echo "PR_NUMBER=0" >> $GITHUB_OUTPUT
+            echo "latest=true" >> $GITHUB_OUTPUT
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push (main)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Build and Push
         uses: docker/build-push-action@v5
         with:
+          context: .
           push: true
-          # Note: Uses commit SHA as the tag for exact tracking
-
+          
+          # Push specific tag AND 'latest' if it's a production release
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:latest
-            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/capstone-backend:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.latest == 'true' && format('{0}/capstone-backend:latest', secrets.DOCKERHUB_USERNAME) || '' }}
 
-      - name: Build and Push (PR)
-        if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ github.sha }}
+  trigger_deployment:
+    name: "Trigger Infra Deployment"
+    runs-on: ubuntu-latest
+    needs: [release, build_and_push]
 
-      - name: Trigger Infra Deploy
+    if: (github.event_name == 'pull_request' && github.event.action != 'closed') || needs.release.outputs.new_release_published == 'true'
+    steps:
+      - name: Determine Payload
+        id: payload
         run: |
-          set -euo pipefail
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "ENV=ephemeral" >> $GITHUB_OUTPUT
+            echo "PR=${{ github.event.number }}" >> $GITHUB_OUTPUT
+            echo "TAG=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "ENV=production" >> $GITHUB_OUTPUT
+            echo "PR=0" >> $GITHUB_OUTPUT
+            echo "TAG=v${{ needs.release.outputs.new_release_version }}" >> $GITHUB_OUTPUT
+          fi
 
-          curl --fail-with-body --silent --show-error -L \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository_owner }}/capstone-infra/dispatches \
-            -d '{
-              "event_type": "backend_updated",
-              "client_payload": {
-                "env": "${{ github.event_name == 'push' && 'production' || 'ephemeral' }}",
-                "pr_number": "${{ github.event.number || '0' }}",
-                "backend_tag": "${{ github.sha }}",
-                "repository": "${{ github.repository }}"
-              }
-            }'
+      - name: Signal Infra Repo
+        run: |
+           set -euo pipefail
+           curl -L \
+             -X POST \
+             -H "Accept: application/vnd.github+json" \
+             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+             -H "X-GitHub-Api-Version: 2022-11-28" \
+             https://api.github.com/repos/${{ github.repository_owner }}/capstone-infra/dispatches \
+             -d '{
+               "event_type": "backend_updated",
+               "client_payload": {
+                 "env": "${{ steps.payload.outputs.ENV }}",
+                 "pr_number": "${{ steps.payload.outputs.PR }}",
+                 "backend_tag": "${{ steps.payload.outputs.TAG }}"
+               }
+             }'
 
   destroy-env:
-    # Only run when a PR is closed
-    # Skip fork PRs (no secrets available there)
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    name: Destroy Ephemeral Env
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Cleanup
+      - name: Signal Cleanup
         run: |
           set -euo pipefail
-
-          curl --fail-with-body --silent --show-error -L \
+          curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
