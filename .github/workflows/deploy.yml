@@ -103,8 +103,8 @@ jobs:
           
           # Push specific tag AND 'latest' if it's a production release
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/capstone-backend:${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.latest == 'true' && format('{0}/capstone-backend:latest', secrets.DOCKERHUB_USERNAME) || '' }}
+            ${{ secrets.DOCKER_USERNAME }}/capstone-backend:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.latest == 'true' && format('{0}/capstone-backend:latest', secrets.DOCKER_USERNAME) || '' }}
 
   trigger_deployment:
     name: "Trigger Infra Deployment"
