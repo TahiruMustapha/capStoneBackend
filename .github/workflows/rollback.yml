@@ -1,0 +1,159 @@
+name: Rollback Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to rollback to  previous stable version'
+        required: true
+        type: string
+      confirm:
+        description: 'Type "ROLLBACK" to confirm'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    name: Validate Rollback
+    runs-on: ubuntu-latest
+    outputs:
+      is_valid: ${{ steps.check.outputs.is_valid }}
+    steps:
+      - name: Check Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "ROLLBACK" ]; then
+            echo "Confirmation failed. You must type ROLLBACK to proceed."
+            exit 1
+          fi
+          echo "Confirmation received"
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Validate Version Exists
+        id: check
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          echo "Checking if version $VERSION exists..."
+          
+          # Check if git tag exists
+          if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo " Version $VERSION does not exist in git history"
+            echo "Available versions:"
+            git tag --sort=-version:refname | head -10
+            exit 1
+          fi
+          
+          echo "Version $VERSION exists in git history"
+          echo "is_valid=true" >> $GITHUB_OUTPUT
+
+      - name: Check Docker Image
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          echo "Checking if Docker image exists for $VERSION..."
+          
+          # Login to Docker Hub
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          
+          # Check if image exists
+          if docker manifest inspect ${{ secrets.DOCKER_USERNAME }}/capstone-backend:$VERSION >/dev/null 2>&1; then
+            echo "Docker image found: capstone-backend:$VERSION"
+          else
+            echo "Docker image not found for version $VERSION"
+            echo "This version may not have been built or pushed to Docker Hub"
+            exit 1
+          fi
+
+  rollback:
+    name: Execute Rollback
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Infra Rollback
+        run: |
+          set -euo pipefail
+          
+          VERSION="${{ github.event.inputs.version }}"
+          
+          echo "Initiating rollback to $VERSION"
+          
+          curl --fail-with-body --silent --show-error -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository_owner }}/capstone-infra/dispatches \
+            -d '{
+              "event_type": "backend_rollback",
+              "client_payload": {
+                "version": "'"$VERSION"'",
+                "triggered_by": "${{ github.actor }}",
+                "timestamp": "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'",
+                "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              }
+            }'
+          
+          echo "Rollback request sent to infrastructure repository"
+
+      - name: Create Rollback Issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = '${{ github.event.inputs.version }}';
+            const actor = '${{ github.actor }}';
+            const runUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Production Rollback to ${version}`,
+              body: `## Rollback Executed
+              
+              **Version:** \`${version}\`
+              **Triggered by:** @${actor}
+              **Time:** ${new Date().toISOString()}
+              **Workflow Run:** ${runUrl}
+              
+              ### Action Required
+              
+              - [ ] Verify rollback was successful
+              - [ ] Monitor application health
+              - [ ] Investigate root cause of issue
+              - [ ] Document incident details
+              - [ ] Plan forward fix
+              
+              ### Next Steps
+              
+              1. Check infrastructure deployment status
+              2. Verify health endpoints are responding
+              3. Review application logs for errors
+              4. Update team on status
+              
+              **Note:** This issue was automatically created by the rollback workflow.`,
+              labels: ['rollback', 'production', 'incident'],
+              assignees: [actor]
+            });
+            
+            console.log('Rollback tracking issue created');
+
+      - name: Summary
+        run: |
+          echo "## Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** Rollback initiated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Monitor infrastructure deployment in capstone-infra repository" >> $GITHUB_STEP_SUMMARY
+          echo "2. Verify application health at production URL" >> $GITHUB_STEP_SUMMARY
+          echo "3. Check rollback tracking issue for updates" >> $GITHUB_STEP_SUMMARY
