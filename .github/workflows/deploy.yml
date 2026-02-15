@@ -67,7 +67,8 @@ jobs:
     name: "Build & Push Docker Image"
     runs-on: ubuntu-latest
     needs: [test, release]
-    # Run if it's a PR (not closed) OR if a new release was published
+    
+    
     if: (github.event_name == 'pull_request' && github.event.action != 'closed') || needs.release.outputs.new_release_published == 'true'
     steps:
       - name: Checkout
@@ -99,6 +100,7 @@ jobs:
         with:
           context: .
           push: true
+          
           # Push specific tag AND 'latest' if it's a production release
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/capstone-backend:${{ steps.meta.outputs.tag }}
@@ -108,7 +110,7 @@ jobs:
     name: "Trigger Infra Deployment"
     runs-on: ubuntu-latest
     needs: [release, build_and_push]
-    # Reuse the logic from build_and_push to decide tag
+
     if: (github.event_name == 'pull_request' && github.event.action != 'closed') || needs.release.outputs.new_release_published == 'true'
     steps:
       - name: Determine Payload
