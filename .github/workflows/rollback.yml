@@ -68,7 +68,7 @@ jobs:
             echo "Docker image found: capstone-backend:$VERSION"
           else
             echo "Docker image not found for version $VERSION"
-            echo "This version may not have been built or pushed to Docker Hub"
+            echo "This version may not have been built or pushed to your  Docker Hub"
             exit 1
           fi
 
@@ -101,7 +101,7 @@ jobs:
               }
             }'
           
-          echo "Rollback request sent to infrastructure repository"
+          echo "Rollback request sent to infra repo"
 
       - name: Create Rollback Issue
         uses: actions/github-script@v6
@@ -116,44 +116,26 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `Production Rollback to ${version}`,
-              body: `## Rollback Executed
+              body: `Rollback Executed (Backend)
               
-              **Version:** \`${version}\`
-              **Triggered by:** @${actor}
-              **Time:** ${new Date().toISOString()}
-              **Workflow Run:** ${runUrl}
+              Version: \`${version}\`
+              Triggered by: @${actor}
+              Time: ${new Date().toISOString()}
+              Workflow Run: ${runUrl}
               
-              ### Action Required
               
-              - [ ] Verify rollback was successful
-              - [ ] Monitor application health
-              - [ ] Investigate root cause of issue
-              - [ ] Document incident details
-              - [ ] Plan forward fix
-              
-              ### Next Steps
-              
-              1. Check infrastructure deployment status
-              2. Verify health endpoints are responding
-              3. Review application logs for errors
-              4. Update team on status
-              
-              **Note:** This issue was automatically created by the rollback workflow.`,
+              _Automatically created by the rollback workflow.`,
               labels: ['rollback', 'production', 'incident'],
               assignees: [actor]
             });
             
-            console.log('Rollback tracking issue created');
 
       - name: Summary
         run: |
-          echo "## Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Rollback Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** Rollback initiated" >> $GITHUB_STEP_SUMMARY
+          echo "Version: ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "Status: Rollback initiated" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Monitor infrastructure deployment in capstone-infra repository" >> $GITHUB_STEP_SUMMARY
-          echo "2. Verify application health at production URL" >> $GITHUB_STEP_SUMMARY
-          echo "3. Check rollback tracking issue for updates" >> $GITHUB_STEP_SUMMARY
+          
